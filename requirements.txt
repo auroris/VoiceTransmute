@@ -1,0 +1,7 @@
+python-dotenv
+sounddevice
+numpy
+httpx
+torch
+torchaudio
+silero-vad
