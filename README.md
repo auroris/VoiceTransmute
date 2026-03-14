@@ -1,6 +1,6 @@
 # VoiceTransmute
 
-Near real-time speech-to-speech voice changer powered by the ElevenLabs API.
+Speedy speech-to-speech voice changer powered by the ElevenLabs API.
 
 Captures audio from your microphone, detects speech using Silero VAD, streams it to the ElevenLabs speech-to-speech endpoint, and plays the transformed audio back through your speakers — all with minimal latency.
 
