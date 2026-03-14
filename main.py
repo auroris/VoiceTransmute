@@ -22,7 +22,7 @@ import config
 from vad import UtteranceDetector, SpeechStart, SpeechData, SpeechEnd
 from api_client import stream_speech_to_speech
 from playback import AudioPlayer
-from ui import pick_device, fetch_voices, pick_voice, pick_model, voice_switcher
+from ui import pick_device, fetch_voices, pick_voice, pick_model, voice_switcher, save_selections
 
 
 async def run(input_device: int, output_device: int, voices: list[dict]):
@@ -145,10 +145,16 @@ def main():
     config.VOICE_ID = args.voice if args.voice else pick_voice(voices)
     config.MODEL_ID = args.model if args.model else pick_model()
 
-    print(f"\n  Input:  {sd.query_devices(input_dev)['name']}")
-    print(f"  Output: {sd.query_devices(output_dev)['name']}")
+    input_name = sd.query_devices(input_dev)['name']
+    output_name = sd.query_devices(output_dev)['name']
+
+    print(f"\n  Input:  {input_name}")
+    print(f"  Output: {output_name}")
     print(f"  Voice:  {config.VOICE_ID}")
     print(f"  Model:  {config.MODEL_ID}")
+
+    # Remember selections for next launch
+    save_selections(input_name, output_name, config.VOICE_ID, config.MODEL_ID)
 
     asyncio.run(run(input_dev, output_dev, voices))
 

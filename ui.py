@@ -1,13 +1,47 @@
 """
 Interactive pickers for devices, voices, and models.
 Also contains the runtime voice-switcher (stdin command handler).
+
+Selections are persisted to preferences.json so they become the
+default on next launch.
 """
 
 import asyncio
+import json
+import os
 import sounddevice as sd
 import httpx
 
 import config
+
+_PREFS_PATH = os.path.join(os.path.dirname(__file__), "preferences.json")
+
+
+# ── Preferences ──────────────────────────────────────────────
+
+def load_prefs() -> dict:
+    """Load saved preferences, or return empty dict if none exist."""
+    try:
+        with open(_PREFS_PATH, "r") as f:
+            return json.load(f)
+    except (FileNotFoundError, json.JSONDecodeError):
+        return {}
+
+
+def save_prefs(prefs: dict):
+    """Write preferences to disk."""
+    with open(_PREFS_PATH, "w") as f:
+        json.dump(prefs, f, indent=2)
+
+
+def save_selections(input_name: str, output_name: str, voice_id: str, model_id: str):
+    """Save the current session's selections for next launch."""
+    prefs = load_prefs()
+    prefs["input_device"] = input_name
+    prefs["output_device"] = output_name
+    prefs["voice_id"] = voice_id
+    prefs["model_id"] = model_id
+    save_prefs(prefs)
 
 
 # ── Device picker ────────────────────────────────────────────
@@ -23,18 +57,31 @@ def get_filtered_devices(direction: str) -> list[tuple[int, dict]]:
 
 
 def pick_device(direction: str) -> int:
-    """Interactive device picker. Shows only relevant devices with clean numbering."""
+    """Interactive device picker. Defaults to the last-used device if available."""
     filtered = get_filtered_devices(direction)
+    prefs = load_prefs()
+    pref_key = "input_device" if direction == "input" else "output_device"
+    saved_name = prefs.get(pref_key)
+
+    # Find the saved device by name, fall back to index 0
+    default_display = 0
+    if saved_name:
+        for display_idx, (_real_idx, dev) in enumerate(filtered):
+            if dev["name"] == saved_name:
+                default_display = display_idx
+                break
+
     label = "Input" if direction == "input" else "Output"
     print(f"\n── {label} Devices ─────────────────────────────────")
     for display_idx, (_real_idx, dev) in enumerate(filtered):
-        print(f"  {display_idx:3d}: {dev['name']}")
+        marker = " *" if display_idx == default_display else ""
+        print(f"  {display_idx:3d}: {dev['name']}{marker}")
     print()
 
     while True:
-        raw = input(f"Select {direction} device [0]: ").strip()
+        raw = input(f"Select {direction} device [{default_display}]: ").strip()
         if raw == "":
-            return filtered[0][0]
+            return filtered[default_display][0]
         try:
             idx = int(raw)
             if 0 <= idx < len(filtered):
@@ -65,14 +112,17 @@ def pick_voice(voices: list[dict]) -> str:
         print("  No personal voices found. Using configured default.")
         return config.VOICE_ID
 
+    prefs = load_prefs()
+    saved_voice = prefs.get("voice_id", config.VOICE_ID)
+
     configured_idx = None
     for i, v in enumerate(voices):
-        if v["voice_id"] == config.VOICE_ID:
+        if v["voice_id"] == saved_voice:
             configured_idx = i
 
     print("\n── Your Voices ─────────────────────────────────────")
     for i, v in enumerate(voices):
-        marker = " *" if v["voice_id"] == config.VOICE_ID else ""
+        marker = " *" if v["voice_id"] == saved_voice else ""
         print(f"  {i:3d}: {v['name']}{marker}")
     print()
 
@@ -114,14 +164,17 @@ def pick_model() -> str:
         print("  No voice-conversion models found. Using default.")
         return config.MODEL_ID
 
+    prefs = load_prefs()
+    saved_model = prefs.get("model_id", config.MODEL_ID)
+
     configured_idx = None
     for i, m in enumerate(models):
-        if m["model_id"] == config.MODEL_ID:
+        if m["model_id"] == saved_model:
             configured_idx = i
 
     print("\n── Voice Conversion Models ─────────────────────────")
     for i, m in enumerate(models):
-        marker = " *" if m["model_id"] == config.MODEL_ID else ""
+        marker = " *" if m["model_id"] == saved_model else ""
         print(f"  {i:3d}: {m['name']} ({m['model_id']}){marker}")
     print()
 
@@ -173,6 +226,10 @@ def voice_switcher(voices: list[dict], loop: asyncio.AbstractEventLoop,
                     if 0 <= idx < len(voices):
                         config.VOICE_ID = voices[idx]["voice_id"]
                         print(f"  Voice switched to: {voices[idx]['name']}")
+                        # Persist the switch
+                        prefs = load_prefs()
+                        prefs["voice_id"] = config.VOICE_ID
+                        save_prefs(prefs)
                         break
                     print("  Out of range. Try again.")
                 except ValueError:
