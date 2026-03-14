@@ -156,10 +156,10 @@ def fetch_sts_models() -> list[dict]:
     ]
 
 
-def pick_model() -> str:
+def pick_model(models: list[dict] | None = None) -> str:
     """List STS-capable models and let the user pick one."""
-    print("\n── Fetching available voice-conversion models... ──")
-    models = fetch_sts_models()
+    if models is None:
+        models = fetch_sts_models()
     if not models:
         print("  No voice-conversion models found. Using default.")
         return config.MODEL_ID

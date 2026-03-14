@@ -94,5 +94,8 @@ While the app is running:
 ## Requirements
 
 - Python 3.11+
-- An [ElevenLabs](https://elevenlabs.io) account with API access
+- An [ElevenLabs](https://elevenlabs.io) account with an API key that has the following permissions:
+  - **Speech to Speech** (Access)
+  - **Voices** (Read)
+  - **User** (Read)
 - A microphone and speakers/headphones

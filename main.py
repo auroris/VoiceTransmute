@@ -22,7 +22,7 @@ import config
 from vad import UtteranceDetector, SpeechStart, SpeechData, SpeechEnd
 from api_client import stream_speech_to_speech, fetch_usage
 from playback import AudioPlayer
-from ui import pick_device, fetch_voices, pick_voice, pick_model, voice_switcher, save_selections
+from ui import pick_device, fetch_voices, pick_voice, fetch_sts_models, pick_model, voice_switcher, save_selections
 
 
 async def run(input_device: int, output_device: int, voices: list[dict]):
@@ -163,16 +163,19 @@ def main():
     output_dev = args.output if args.output is not None else pick_device("output")
 
     voices = fetch_voices()
+    models = fetch_sts_models()
     config.VOICE_ID = args.voice if args.voice else pick_voice(voices)
-    config.MODEL_ID = args.model if args.model else pick_model()
+    config.MODEL_ID = args.model if args.model else pick_model(models)
 
     input_name = sd.query_devices(input_dev)['name']
     output_name = sd.query_devices(output_dev)['name']
+    voice_name = next((v["name"] for v in voices if v["voice_id"] == config.VOICE_ID), config.VOICE_ID)
+    model_name = next((m["name"] for m in models if m["model_id"] == config.MODEL_ID), config.MODEL_ID)
 
     print(f"\n  Input:  {input_name}")
     print(f"  Output: {output_name}")
-    print(f"  Voice:  {config.VOICE_ID}")
-    print(f"  Model:  {config.MODEL_ID}")
+    print(f"  Voice:  {voice_name}")
+    print(f"  Model:  {model_name}")
 
     # Remember selections for next launch
     save_selections(input_name, output_name, config.VOICE_ID, config.MODEL_ID)
