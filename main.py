@@ -20,7 +20,7 @@ import sounddevice as sd
 
 import config
 from vad import UtteranceDetector, SpeechStart, SpeechData, SpeechEnd
-from api_client import stream_speech_to_speech
+from api_client import stream_speech_to_speech, fetch_usage
 from playback import AudioPlayer
 from ui import pick_device, fetch_voices, pick_voice, pick_model, voice_switcher, save_selections
 
@@ -58,6 +58,25 @@ async def run(input_device: int, output_device: int, voices: list[dict]):
         blocksize=512,
         callback=audio_callback,
     )
+
+    # ── Usage tracking (debounced to once per 60s) ──
+    last_usage_fetch: float = 0
+    USAGE_INTERVAL = 60  # seconds
+
+    async def show_usage(label: str = ""):
+        nonlocal last_usage_fetch
+        now = time.monotonic()
+        if now - last_usage_fetch < USAGE_INTERVAL:
+            return
+        last_usage_fetch = now
+        result = await fetch_usage()
+        if result:
+            used, limit = result
+            pct = used / limit * 100 if limit else 0
+            print(f"  [usage] {used:,}/{limit:,} ({pct:.2f}%)")
+
+    # Fetch usage on startup
+    await show_usage("startup")
 
     print("\n── Listening. Speak into the microphone. ──")
     print("── Commands: 'v' = switch voice, 'q' = quit ──\n")
@@ -113,6 +132,8 @@ async def run(input_device: int, output_device: int, voices: list[dict]):
                           f"streamed over {elapsed_ms:.0f}ms")
 
                     audio_queue = None
+
+                    await show_usage()
 
     except KeyboardInterrupt:
         print("\n── Shutting down. ──")

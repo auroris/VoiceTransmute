@@ -44,6 +44,22 @@ def _wav_header(sample_rate: int, channels: int, bits_per_sample: int) -> bytes:
     return header
 
 
+async def fetch_usage() -> tuple[int, int] | None:
+    """Fetch character usage from ElevenLabs. Returns (used, limit) or None on error."""
+    client = await get_client()
+    try:
+        resp = await client.get(
+            "https://api.elevenlabs.io/v1/user",
+            headers={"xi-api-key": config.ELEVENLABS_API_KEY},
+        )
+        resp.raise_for_status()
+        sub = resp.json()["subscription"]
+        return sub["character_count"], sub["character_limit"]
+    except Exception as e:
+        print(f"  [usage] failed to fetch: {e}")
+        return None
+
+
 async def stream_speech_to_speech(
     audio_queue: asyncio.Queue[bytes | None],
 ) -> AsyncIterator[bytes]:
