@@ -42,6 +42,8 @@ Copy `.env` and fill in your API key:
 ELEVENLABS_API_KEY=sk_your_key_here
 ELEVENLABS_VOICE_ID=your_voice_id      # optional, can pick at startup
 ELEVENLABS_MODEL_ID=eleven_multilingual_sts_v2  # optional, can pick at startup
+REMOVE_BACKGROUND_NOISE=false          # ElevenLabs noise removal
+DEBUG=false                            # save input/output MP3s to debug/
 ```
 
 VAD tuning is in `config.py`:

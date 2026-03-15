@@ -3,3 +3,4 @@ preferences.json
 __pycache__/
 *.pyc
 venv/
+debug/

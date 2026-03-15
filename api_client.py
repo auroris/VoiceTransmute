@@ -94,6 +94,11 @@ async def stream_speech_to_speech(
         yield b'Content-Disposition: form-data; name="model_id"\r\n\r\n'
         yield f"{config.MODEL_ID}\r\n".encode()
 
+        # remove_background_noise field
+        yield f"--{boundary}\r\n".encode()
+        yield b'Content-Disposition: form-data; name="remove_background_noise"\r\n\r\n'
+        yield f"{'true' if config.REMOVE_BACKGROUND_NOISE else 'false'}\r\n".encode()
+
         # audio file field — header
         yield f"--{boundary}\r\n".encode()
         yield b'Content-Disposition: form-data; name="audio"; filename="utterance.wav"\r\n'

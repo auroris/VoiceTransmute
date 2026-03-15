@@ -12,6 +12,7 @@ Usage:
 
 import argparse
 import asyncio
+import os
 import sys
 import threading
 import time
@@ -23,6 +24,34 @@ from vad import UtteranceDetector, SpeechStart, SpeechData, SpeechEnd
 from api_client import stream_speech_to_speech, fetch_usage
 from playback import AudioPlayer
 from ui import pick_device, fetch_voices, pick_voice, fetch_sts_models, pick_model, voice_switcher, save_selections
+
+
+LOW_LEVEL_DB = -30  # dBFS threshold to warn about quiet input
+
+
+def _rms_dbfs(pcm: bytes) -> float:
+    """Calculate RMS level in dBFS for int16 PCM data."""
+    samples = np.frombuffer(pcm, dtype=np.int16).astype(np.float64)
+    if len(samples) == 0:
+        return -96.0
+    rms = np.sqrt(np.mean(samples ** 2))
+    if rms < 1:
+        return -96.0
+    return 20 * np.log10(rms / 32768)
+
+
+def _write_mp3(path: str, pcm: bytes, sample_rate: int, channels: int = 1):
+    """Encode raw PCM int16 data to MP3 using lameenc."""
+    import lameenc
+    encoder = lameenc.Encoder()
+    encoder.set_in_sample_rate(sample_rate)
+    encoder.set_channels(channels)
+    encoder.set_bit_rate(128)
+    encoder.set_quality(2)
+    mp3_data = encoder.encode(pcm)
+    mp3_data += encoder.flush()
+    with open(path, "wb") as f:
+        f.write(mp3_data)
 
 
 async def run(input_device: int, output_device: int, voices: list[dict]):
@@ -78,23 +107,38 @@ async def run(input_device: int, output_device: int, voices: list[dict]):
     # Fetch usage on startup
     await show_usage("startup")
 
+    # ── Debug setup ──
+    if config.DEBUG:
+        os.makedirs(config.DEBUG_DIR, exist_ok=True)
+        print(f"  [debug] writing MP3s to {config.DEBUG_DIR}/")
+    utterance_num = 0
+
     print("\n── Listening. Speak into the microphone. ──")
-    print("── Commands: 'v' = switch voice, 'q' = quit ──\n")
+    print("── Commands: 'v' = switch voice, 'm' = mute, 'q' = quit ──\n")
+    muted = False
     capture.start()
 
     audio_queue: asyncio.Queue[bytes | None] | None = None
     api_task: asyncio.Task | None = None
     speech_start_time: float = 0
     pcm_byte_count: int = 0
+    input_chunks: list[bytes] = []
 
-    async def run_api_request(q: asyncio.Queue[bytes | None]):
+    async def run_api_request(q: asyncio.Queue[bytes | None], utt_num: int):
         try:
             chunk_count = 0
+            output_chunks: list[bytes] = [] if config.DEBUG else None
             async for audio_chunk in stream_speech_to_speech(q):
                 player.enqueue(audio_chunk)
                 chunk_count += 1
+                if output_chunks is not None:
+                    output_chunks.append(audio_chunk)
             player.drain_marker()
             print(f"  [playback] {chunk_count} chunks queued")
+            if output_chunks:
+                path = os.path.join(config.DEBUG_DIR, f"{utt_num:04d}_output.mp3")
+                _write_mp3(path, b"".join(output_chunks), config.PLAYBACK_SAMPLE_RATE)
+                print(f"  [debug] wrote {path}")
         except Exception as e:
             print(f"  [error] API request failed: {e}", file=sys.stderr)
 
@@ -106,23 +150,39 @@ async def run(input_device: int, output_device: int, voices: list[dict]):
                 print("\n── Shutting down. ──")
                 break
 
+            if event == "mute":
+                muted = True
+                print("  [muted] microphone muted")
+                continue
+            if event == "unmute":
+                muted = False
+                print("  [muted] microphone unmuted")
+                continue
+
+            if muted:
+                continue
+
             if isinstance(event, SpeechStart):
                 speech_start_time = time.monotonic()
                 pcm_byte_count = len(event.audio)
+                utterance_num += 1
+                input_chunks = [event.audio]
 
                 audio_queue = asyncio.Queue()
                 audio_queue.put_nowait(event.audio)
-                api_task = asyncio.create_task(run_api_request(audio_queue))
+                api_task = asyncio.create_task(run_api_request(audio_queue, utterance_num))
                 print("  [stream] speech detected, connection opened")
 
             elif isinstance(event, SpeechData):
                 if audio_queue is not None:
                     pcm_byte_count += len(event.audio)
+                    input_chunks.append(event.audio)
                     audio_queue.put_nowait(event.audio)
 
             elif isinstance(event, SpeechEnd):
                 if audio_queue is not None:
                     pcm_byte_count += len(event.audio)
+                    input_chunks.append(event.audio)
                     audio_queue.put_nowait(event.audio)
                     audio_queue.put_nowait(None)
 
@@ -130,6 +190,16 @@ async def run(input_device: int, output_device: int, voices: list[dict]):
                     elapsed_ms = (time.monotonic() - speech_start_time) * 1000
                     print(f"  [stream] utterance complete: {duration_ms:.0f}ms audio, "
                           f"streamed over {elapsed_ms:.0f}ms")
+
+                    input_pcm = b"".join(input_chunks)
+                    db = _rms_dbfs(input_pcm)
+                    if config.DEBUG:
+                        print(f"  [debug] input level: {db:.1f} dBFS")
+                        path = os.path.join(config.DEBUG_DIR, f"{utterance_num:04d}_input.mp3")
+                        _write_mp3(path, input_pcm, config.CAPTURE_SAMPLE_RATE)
+                        print(f"  [debug] wrote {path}")
+                    elif db < LOW_LEVEL_DB:
+                        print(f"  [warn] input very quiet ({db:.1f} dBFS) — conversion quality may suffer")
 
                     audio_queue = None
 

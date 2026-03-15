@@ -5,3 +5,4 @@ httpx
 torch
 torchaudio
 silero-vad
+lameenc

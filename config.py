@@ -13,6 +13,7 @@ ELEVENLABS_API_KEY = os.environ.get("ELEVENLABS_API_KEY", "")
 VOICE_ID = os.environ.get("ELEVENLABS_VOICE_ID", "JBFqnCBsd6RMkjVDRZzb")
 MODEL_ID = os.environ.get("ELEVENLABS_MODEL_ID", "eleven_english_sts_v2")
 API_BASE = "https://api.elevenlabs.io/v1/speech-to-speech"
+REMOVE_BACKGROUND_NOISE = os.environ.get("REMOVE_BACKGROUND_NOISE", "").lower() in ("1", "true", "yes")
 
 # ── Audio capture (sent to ElevenLabs as pcm_s16le_16) ─────
 CAPTURE_SAMPLE_RATE = 16000
@@ -26,6 +27,11 @@ PLAYBACK_DTYPE = "int16"
 
 # ── API output format ──────────────────────────────────────
 OUTPUT_FORMAT = "pcm_22050"
+
+# ── VAD (Silero) ───────────────────────────────────────────
+# ── Debug ─────────────────────────────────────────────────
+DEBUG = os.environ.get("DEBUG", "").lower() in ("1", "true", "yes")
+DEBUG_DIR = os.environ.get("DEBUG_DIR", "debug")
 
 # ── VAD (Silero) ───────────────────────────────────────────
 VAD_THRESHOLD = 0.65

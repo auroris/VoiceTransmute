@@ -198,8 +198,9 @@ def voice_switcher(voices: list[dict], loop: asyncio.AbstractEventLoop,
                     event_queue: asyncio.Queue):
     """
     Background thread that reads stdin for commands.
-    Type 'v' to switch voice, 'q' to quit.
+    Type 'v' to switch voice, 'm' to mute/unmute, 'q' to quit.
     """
+    muted = False
     while True:
         try:
             line = input().strip().lower()
@@ -234,6 +235,10 @@ def voice_switcher(voices: list[dict], loop: asyncio.AbstractEventLoop,
                     print("  Out of range. Try again.")
                 except ValueError:
                     print("  Invalid index. Try again.")
+
+        elif line == "m":
+            muted = not muted
+            loop.call_soon_threadsafe(event_queue.put_nowait, "mute" if muted else "unmute")
 
         elif line == "q":
             loop.call_soon_threadsafe(event_queue.put_nowait, "quit")
