@@ -4,7 +4,9 @@ Emits streaming events: speech chunks arrive as they're captured,
 not buffered until the end.
 """
 
+from collections import deque
 from dataclasses import dataclass
+import math
 import numpy as np
 import torch
 from silero_vad import load_silero_vad, VADIterator
@@ -43,11 +45,15 @@ class UtteranceDetector:
             speech_pad_ms=15,
         )
         self._in_speech = False
+        window_ms = 512 / config.CAPTURE_SAMPLE_RATE * 1000  # 32ms per window at 16kHz
+        buffer_windows = math.ceil(config.VAD_PRE_SPEECH_BUFFER_MS / window_ms)
+        self._pre_buffer: deque[bytes] = deque(maxlen=buffer_windows)
 
     def reset(self):
         """Reset state between utterances."""
         self._vad.reset_states()
         self._in_speech = False
+        self._pre_buffer.clear()
 
     def _to_pcm_bytes(self, float_chunk: torch.Tensor) -> bytes:
         """Convert a float32 tensor back to int16 PCM bytes."""
@@ -75,7 +81,9 @@ class UtteranceDetector:
             if result is not None:
                 if "start" in result:
                     self._in_speech = True
-                    events.append(SpeechStart(audio=self._to_pcm_bytes(chunk)))
+                    pre_audio = b"".join(self._pre_buffer)
+                    self._pre_buffer.clear()
+                    events.append(SpeechStart(audio=pre_audio + self._to_pcm_bytes(chunk)))
                     continue
 
                 elif "end" in result:
@@ -86,5 +94,7 @@ class UtteranceDetector:
 
             if self._in_speech:
                 events.append(SpeechData(audio=self._to_pcm_bytes(chunk)))
+            else:
+                self._pre_buffer.append(self._to_pcm_bytes(chunk))
 
         return events

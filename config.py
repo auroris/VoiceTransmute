@@ -37,3 +37,4 @@ DEBUG_DIR = os.environ.get("DEBUG_DIR", "debug")
 VAD_THRESHOLD = 0.65
 SILENCE_DURATION_MS = 300   # silence before utterance is finalized
 MIN_SPEECH_DURATION_MS = 300  # ignore very short bursts
+VAD_PRE_SPEECH_BUFFER_MS = 300  # pre-speech audio prepended at utterance onset
